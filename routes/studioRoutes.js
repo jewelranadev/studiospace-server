@@ -30,4 +30,33 @@ router.get("/featured", async (req, res) => {
   }
 });
 
+/// Get All Studios
+router.get("/", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+
+    const { category } = req.query;
+
+    const filter = category ? { category } : {};
+
+    const studios = await db
+      .collection("studios")
+      .find(filter)
+      .sort({ _id: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      message: "Studios fetched successfully",
+      data: studios,
+    });
+  } catch (error) {
+    console.error("All Studios Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch studios",
+    });
+  }
+});
 export default router;
