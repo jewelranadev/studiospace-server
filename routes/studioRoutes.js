@@ -4,10 +4,9 @@ import { connectToDatabase } from "../config/db.js";
 
 const router = express.Router();
 
-
+// Create New Studio
 router.post("/", async (req, res) => {
   try {
-    // Verify internal API request
     const secret = req.headers["x-internal-api-key"];
 
     if (
@@ -34,7 +33,6 @@ router.post("/", async (req, res) => {
       hostEmail,
     } = req.body;
 
-    // Required field validation
     if (
       !title ||
       !category ||
@@ -50,7 +48,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Number validation
     const rate = Number(hourlyRate);
     const deposit = Number(securityDeposit);
     const capacity = Number(maxCapacity);
@@ -76,7 +73,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Prepare studio data
     const newStudio = {
       title: title.trim(),
       category,
@@ -93,12 +89,9 @@ router.post("/", async (req, res) => {
       createdAt: new Date(),
     };
 
-    // Save to MongoDB
     const db = await connectToDatabase();
 
-    const result = await db
-      .collection("studios")
-      .insertOne(newStudio);
+    const result = await db.collection("studios").insertOne(newStudio);
 
     return res.status(201).json({
       success: true,
@@ -170,6 +163,182 @@ router.get("/", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch studios",
+    });
+  }
+});
+
+// Get Studios Hosted By The Logged-In User
+router.get("/mine", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const hostEmail = req.headers["x-user-email"];
+
+    if (
+      !process.env.INTERNAL_API_SECRET ||
+      secret !== process.env.INTERNAL_API_SECRET
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!hostEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing user email",
+      });
+    }
+
+    const db = await connectToDatabase();
+
+    const studios = await db
+      .collection("studios")
+      .find({ hostEmail })
+      .sort({ _id: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      message: "Your studios fetched successfully",
+      data: studios,
+    });
+  } catch (error) {
+    console.error("My Studios Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch your studios",
+    });
+  }
+});
+
+// Update Studio
+router.put("/:id", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const hostEmail = req.headers["x-user-email"];
+    const { id } = req.params;
+
+    // Verify internal API request
+    if (
+      !process.env.INTERNAL_API_SECRET ||
+      secret !== process.env.INTERNAL_API_SECRET
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid studio ID",
+      });
+    }
+
+    if (!hostEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing user email",
+      });
+    }
+
+    const {
+      title,
+      category,
+      hourlyRate,
+      securityDeposit,
+      maxCapacity,
+      location,
+      image,
+      amenities,
+      overview,
+    } = req.body;
+
+    // Required field validation
+    if (
+      !title ||
+      !category ||
+      !location ||
+      !image ||
+      !overview
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields",
+      });
+    }
+
+    // Number validation
+    const rate = Number(hourlyRate);
+    const deposit = Number(securityDeposit);
+    const capacity = Number(maxCapacity);
+
+    if (
+      !Number.isFinite(rate) ||
+      rate <= 0 ||
+      !Number.isFinite(deposit) ||
+      deposit < 0 ||
+      !Number.isInteger(capacity) ||
+      capacity <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid studio pricing or capacity",
+      });
+    }
+
+    if (!Array.isArray(amenities) || amenities.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please add at least one studio amenity",
+      });
+    }
+
+    const updatedData = {
+      title: title.trim(),
+      category,
+      hourlyRate: rate,
+      securityDeposit: deposit,
+      maxCapacity: capacity,
+      location: location.trim(),
+      image: image.trim(),
+      amenities,
+      overview: overview.trim(),
+      updatedAt: new Date(),
+    };
+
+    const db = await connectToDatabase();
+
+    const result = await db.collection("studios").updateOne(
+      {
+        _id: new ObjectId(id),
+        hostEmail,
+      },
+      {
+        $set: updatedData,
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Studio not found or unauthorized",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Studio updated successfully",
+    });
+  } catch (error) {
+    console.error("Update Studio Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update studio",
     });
   }
 });
