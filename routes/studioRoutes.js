@@ -347,7 +347,6 @@ router.put("/:id", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const secret = req.headers["x-internal-api-key"];
-    const hostEmail = req.headers["x-user-email"];
     const { id } = req.params;
 
     if (
@@ -367,24 +366,16 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    if (!hostEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing user email",
-      });
-    }
-
     const db = await connectToDatabase();
 
     const studio = await db.collection("studios").findOne({
       _id: new ObjectId(id),
-      hostEmail,
     });
 
     if (!studio) {
       return res.status(404).json({
         success: false,
-        message: "Studio not found or unauthorized",
+        message: "Studio not found",
       });
     }
 

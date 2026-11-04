@@ -1,0 +1,128 @@
+import express from "express";
+import { ObjectId } from "mongodb";
+import { connectToDatabase } from "../config/db.js";
+
+const router = express.Router();
+
+router.post("/", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const userEmail = req.headers["x-user-email"];
+
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User email is required",
+      });
+    }
+
+    const { studioId, date, startTime, endTime } = req.body;
+
+    if (!studioId || !date || !startTime || !endTime) {
+      return res.status(400).json({
+        success: false,
+        message: "All booking fields are required",
+      });
+    }
+
+    if (!ObjectId.isValid(studioId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid studio ID",
+      });
+    }
+
+    const start = startTime.split(":").map(Number);
+    const end = endTime.split(":").map(Number);
+
+    const startMinutes = start[0] * 60 + start[1];
+    const endMinutes = end[0] * 60 + end[1];
+
+    if (
+      !/^\d{2}:\d{2}$/.test(startTime) ||
+      !/^\d{2}:\d{2}$/.test(endTime) ||
+      start[0] > 23 ||
+      start[1] > 59 ||
+      end[0] > 23 ||
+      end[1] > 59 ||
+      startMinutes >= endMinutes
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking time",
+      });
+    }
+
+    const db = await connectToDatabase();
+
+    const studio = await db.collection("studios").findOne({
+      _id: new ObjectId(studioId),
+    });
+
+    if (!studio) {
+      return res.status(404).json({
+        success: false,
+        message: "Studio not found",
+      });
+    }
+
+    const existingBooking = await db.collection("bookings").findOne({
+      studioId: new ObjectId(studioId),
+      date,
+      status: { $ne: "cancelled" },
+      startTime: { $lt: endTime },
+      endTime: { $gt: startTime },
+    });
+
+    if (existingBooking) {
+      return res.status(409).json({
+        success: false,
+        message: "This time slot is already booked",
+      });
+    }
+
+    const totalHours = (endMinutes - startMinutes) / 60;
+    const totalPrice = totalHours * Number(studio.hourlyRate);
+
+    const booking = {
+      studioId: new ObjectId(studioId),
+      studioTitle: studio.title,
+      userEmail,
+      hostEmail: studio.hostEmail,
+      date,
+      startTime,
+      endTime,
+      totalHours,
+      totalPrice,
+      status: "pending",
+      createdAt: new Date(),
+    };
+
+    const result = await db.collection("bookings").insertOne(booking);
+
+    return res.status(201).json({
+      success: true,
+      message: "Booking created successfully",
+      data: {
+        ...booking,
+        _id: result.insertedId,
+      },
+    });
+  } catch (error) {
+    console.error("Create Booking Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create booking",
+    });
+  }
+});
+
+export default router;

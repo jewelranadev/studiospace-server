@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectToDatabase } from "./config/db.js";
 import studioRoutes from "./routes/studioRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
 
 dotenv.config();
 
@@ -14,6 +15,9 @@ app.use(express.json());
 
 // Studio API
 app.use("/api/studios", studioRoutes);
+
+// Booking API
+app.use("/api/bookings", bookingRoutes);
 
 app.get("/", (req, res) => {
   res.send("StudioSpace Server is Running!");
