@@ -230,4 +230,130 @@ router.patch("/:id/cancel", async (req, res) => {
     });
   }
 });
+
+router.patch("/:id/confirm", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const userEmail = req.headers["x-user-email"];
+    const { id } = req.params;
+
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User email is required",
+      });
+    }
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking ID",
+      });
+    }
+
+    const db = await connectToDatabase();
+
+    const booking = await db.collection("bookings").findOne({
+      _id: new ObjectId(id),
+      status: "pending",
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Pending booking not found",
+      });
+    }
+
+    const studio = await db.collection("studios").findOne({
+      _id: new ObjectId(booking.studioId),
+      hostEmail: userEmail,
+    });
+
+    if (!studio) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to confirm this booking",
+      });
+    }
+
+    await db.collection("bookings").updateOne(
+      { _id: new ObjectId(id), status: "pending" },
+      {
+        $set: {
+          status: "confirmed",
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Booking confirmed successfully",
+    });
+  } catch (error) {
+    console.error("Confirm Booking Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to confirm booking",
+    });
+  }
+});
+
+router.get("/host-bookings", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const userEmail = req.headers["x-user-email"];
+
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User email is required",
+      });
+    }
+
+    const db = await connectToDatabase();
+
+    // Find studios owned by this host
+    const studios = await db.collection("studios")
+      .find({ hostEmail: userEmail })
+      .toArray();
+
+    const studioIds = studios.map((studio) => studio._id);
+
+    // Find bookings for those studios
+    const bookings = await db.collection("bookings")
+      .find({ studioId: { $in: studioIds } })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return res.status(200).json({
+      success: true,
+      data: bookings,
+    });
+  } catch (error) {
+    console.error("Host Bookings Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch host bookings",
+    });
+  }
+});
+
 export default router;
