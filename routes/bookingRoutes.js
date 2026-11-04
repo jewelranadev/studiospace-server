@@ -1,13 +1,14 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "../config/db.js";
+import { verifyAuth } from "../middleware/verifyAuth.js";
 
 const router = express.Router();
 
-router.post("/", async (req, res) => {
+router.post("/", verifyAuth, async (req, res) => {
   try {
     const secret = req.headers["x-internal-api-key"];
-    const userEmail = req.headers["x-user-email"];
+   const userEmail = req.user.email;
 
     if (secret !== process.env.INTERNAL_API_SECRET) {
       return res.status(401).json({
@@ -330,17 +331,10 @@ router.get("/host-bookings", async (req, res) => {
     const db = await connectToDatabase();
 
     // Find studios owned by this host
-    const studios = await db.collection("studios")
-      .find({ hostEmail: userEmail })
-      .toArray();
-
-    const studioIds = studios.map((studio) => studio._id);
-
-    // Find bookings for those studios
-    const bookings = await db.collection("bookings")
-      .find({ studioId: { $in: studioIds } })
-      .sort({ createdAt: -1 })
-      .toArray();
+   const bookings = await db.collection("bookings")
+  .find({ hostEmail: userEmail })
+  .sort({ createdAt: -1 })
+  .toArray();
 
     return res.status(200).json({
       success: true,

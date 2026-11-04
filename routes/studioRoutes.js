@@ -1,11 +1,12 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import { connectToDatabase } from "../config/db.js";
+import { verifyAuth } from "../middleware/verifyAuth.js";
 
 const router = express.Router();
 
 // Create New Studio
-router.post("/", async (req, res) => {
+router.post("/", verifyAuth, async (req, res) => {
   try {
     const secret = req.headers["x-internal-api-key"];
 
@@ -395,7 +396,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // DELETE a studio
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", verifyAuth, async (req, res) => {
   try {
     const apiKey = req.headers["x-internal-api-key"];
     const userEmail = req.headers["x-user-email"];
