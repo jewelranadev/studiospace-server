@@ -403,4 +403,62 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// DELETE a studio
+router.delete("/:id", async (req, res) => {
+  try {
+    const apiKey = req.headers["x-internal-api-key"];
+    const userEmail = req.headers["x-user-email"];
+
+    if (apiKey !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User email is required",
+      });
+    }
+
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid studio ID",
+      });
+    }
+
+    const db = await connectToDatabase();
+    const studios = db.collection("studios");
+
+    const result = await studios.deleteOne({
+      _id: new ObjectId(id),
+      hostEmail: userEmail,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Studio not found or you are not the owner",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Studio deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete Studio Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete studio",
+    });
+  }
+});
+
 export default router;
