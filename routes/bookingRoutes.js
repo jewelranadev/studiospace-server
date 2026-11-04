@@ -123,6 +123,48 @@ router.post("/", async (req, res) => {
       message: "Failed to create booking",
     });
   }
+
+
+});
+
+router.get("/my-bookings", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const userEmail = req.headers["x-user-email"];
+
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User email is required",
+      });
+    }
+
+    const db = await connectToDatabase();
+
+    const bookings = await db.collection("bookings")
+      .find({ userEmail })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return res.status(200).json({
+      success: true,
+      data: bookings,
+    });
+  } catch (error) {
+    console.error("My Bookings Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch bookings",
+    });
+  }
 });
 
 export default router;
