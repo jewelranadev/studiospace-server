@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 let JWKS;
@@ -10,16 +11,68 @@ const getJWKS = () => {
   }
 
   if (!JWKS) {
-    JWKS = createRemoteJWKSet(
-      new URL(`${authUrl}/api/auth/jwks`)
-    );
+    JWKS = createRemoteJWKSet(new URL(`${authUrl}/api/auth/jwks`));
   }
 
   return JWKS;
 };
 
+
+const safeEqual = (a, b) => {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+};
+
 export const verifyAuth = async (req, res, next) => {
   try {
+   
+    const internalKey = req.headers["x-internal-api-key"];
+
+    if (internalKey) {
+      const secret = process.env.INTERNAL_API_SECRET;
+
+      if (!secret) {
+        console.error("INTERNAL_API_SECRET is missing on Express server");
+        return res.status(500).json({
+          success: false,
+          message: "Authentication configuration missing",
+        });
+      }
+
+      if (!safeEqual(internalKey, secret)) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid internal API key",
+        });
+      }
+
+      const email = req.headers["x-user-email"];
+
+      if (!email) {
+        return res.status(401).json({
+          success: false,
+          message: "Missing user identity",
+        });
+      }
+
+      let name = email;
+      try {
+        const rawName = req.headers["x-user-name"];
+        if (rawName) name = decodeURIComponent(rawName);
+      } catch {
+        // Ignore decode errors
+      }
+
+      req.user = {
+        id: req.headers["x-user-id"] || email,
+        email,
+        name,
+      };
+
+      return next();
+    }
+
     const authUrl = process.env.BETTER_AUTH_URL;
 
     if (!authUrl) {
@@ -32,14 +85,13 @@ export const verifyAuth = async (req, res, next) => {
     const cookieHeader = req.headers.cookie || "";
 
     const cookies = Object.fromEntries(
-      cookieHeader.split(";").filter(Boolean).map((cookie) => {
-        const [name, ...value] = cookie.trim().split("=");
-
-        return [
-          name,
-          decodeURIComponent(value.join("=")),
-        ];
-      })
+      cookieHeader
+        .split(";")
+        .filter(Boolean)
+        .map((cookie) => {
+          const [name, ...value] = cookie.trim().split("=");
+          return [name, decodeURIComponent(value.join("="))];
+        })
     );
 
     const cookieName = Object.keys(cookies).find((name) =>
@@ -77,7 +129,7 @@ export const verifyAuth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("JWT verification failed:", error.message);
+    console.error("Auth verification failed:", error.message);
 
     return res.status(401).json({
       success: false,
