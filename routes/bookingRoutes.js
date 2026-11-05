@@ -5,10 +5,11 @@ import { verifyAuth } from "../middleware/verifyAuth.js";
 
 const router = express.Router();
 
+// Create Booking
 router.post("/", verifyAuth, async (req, res) => {
   try {
     const secret = req.headers["x-internal-api-key"];
-   const userEmail = req.user.email;
+    const userEmail = req.user.email;
 
     if (secret !== process.env.INTERNAL_API_SECRET) {
       return res.status(401).json({
@@ -40,6 +41,19 @@ router.post("/", verifyAuth, async (req, res) => {
       });
     }
 
+    
+    if (
+      typeof startTime !== "string" ||
+      typeof endTime !== "string" ||
+      !/^\d{2}:\d{2}$/.test(startTime) ||
+      !/^\d{2}:\d{2}$/.test(endTime)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking time",
+      });
+    }
+
     const start = startTime.split(":").map(Number);
     const end = endTime.split(":").map(Number);
 
@@ -47,8 +61,6 @@ router.post("/", verifyAuth, async (req, res) => {
     const endMinutes = end[0] * 60 + end[1];
 
     if (
-      !/^\d{2}:\d{2}$/.test(startTime) ||
-      !/^\d{2}:\d{2}$/.test(endTime) ||
       start[0] > 23 ||
       start[1] > 59 ||
       end[0] > 23 ||
@@ -124,10 +136,9 @@ router.post("/", verifyAuth, async (req, res) => {
       message: "Failed to create booking",
     });
   }
-
-
 });
 
+// My Bookings
 router.get("/my-bookings", async (req, res) => {
   try {
     const secret = req.headers["x-internal-api-key"];
@@ -149,7 +160,8 @@ router.get("/my-bookings", async (req, res) => {
 
     const db = await connectToDatabase();
 
-    const bookings = await db.collection("bookings")
+    const bookings = await db
+      .collection("bookings")
       .find({ userEmail })
       .sort({ createdAt: -1 })
       .toArray();
@@ -167,6 +179,49 @@ router.get("/my-bookings", async (req, res) => {
     });
   }
 });
+
+// Host Bookings
+router.get("/host-bookings", async (req, res) => {
+  try {
+    const secret = req.headers["x-internal-api-key"];
+    const userEmail = req.headers["x-user-email"];
+
+    if (secret !== process.env.INTERNAL_API_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized request",
+      });
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "User email is required",
+      });
+    }
+
+    const db = await connectToDatabase();
+
+    const bookings = await db
+      .collection("bookings")
+      .find({ hostEmail: userEmail })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return res.status(200).json({
+      success: true,
+      data: bookings,
+    });
+  } catch (error) {
+    console.error("Host Bookings Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch host bookings",
+    });
+  }
+});
+
 // PATCH - Cancel Booking
 router.patch("/:id/cancel", async (req, res) => {
   try {
@@ -232,6 +287,7 @@ router.patch("/:id/cancel", async (req, res) => {
   }
 });
 
+// PATCH - Confirm Booking (host only)
 router.patch("/:id/confirm", async (req, res) => {
   try {
     const secret = req.headers["x-internal-api-key"];
@@ -305,47 +361,6 @@ router.patch("/:id/confirm", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to confirm booking",
-    });
-  }
-});
-
-router.get("/host-bookings", async (req, res) => {
-  try {
-    const secret = req.headers["x-internal-api-key"];
-    const userEmail = req.headers["x-user-email"];
-
-    if (secret !== process.env.INTERNAL_API_SECRET) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized request",
-      });
-    }
-
-    if (!userEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "User email is required",
-      });
-    }
-
-    const db = await connectToDatabase();
-
-    // Find studios owned by this host
-   const bookings = await db.collection("bookings")
-  .find({ hostEmail: userEmail })
-  .sort({ createdAt: -1 })
-  .toArray();
-
-    return res.status(200).json({
-      success: true,
-      data: bookings,
-    });
-  } catch (error) {
-    console.error("Host Bookings Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch host bookings",
     });
   }
 });

@@ -30,19 +30,12 @@ router.post("/", verifyAuth, async (req, res) => {
       image,
       amenities,
       overview,
-      hostName,
-      hostEmail,
     } = req.body;
 
-    if (
-      !title ||
-      !category ||
-      !location ||
-      !image ||
-      !overview ||
-      !hostName ||
-      !hostEmail
-    ) {
+    const hostName = req.user.name;
+    const hostEmail = req.user.email;
+
+    if (!title || !category || !location || !image || !overview) {
       return res.status(400).json({
         success: false,
         message: "Please provide all required fields",
@@ -221,7 +214,6 @@ router.put("/:id", async (req, res) => {
     const hostEmail = req.headers["x-user-email"];
     const { id } = req.params;
 
-    // Verify internal API request
     if (
       !process.env.INTERNAL_API_SECRET ||
       secret !== process.env.INTERNAL_API_SECRET
@@ -258,21 +250,13 @@ router.put("/:id", async (req, res) => {
       overview,
     } = req.body;
 
-    // Required field validation
-    if (
-      !title ||
-      !category ||
-      !location ||
-      !image ||
-      !overview
-    ) {
+    if (!title || !category || !location || !image || !overview) {
       return res.status(400).json({
         success: false,
         message: "Please provide all required fields",
       });
     }
 
-    // Number validation
     const rate = Number(hourlyRate);
     const deposit = Number(securityDeposit);
     const capacity = Number(maxCapacity);
@@ -320,7 +304,7 @@ router.put("/:id", async (req, res) => {
       },
       {
         $set: updatedData,
-      }
+      },
     );
 
     if (result.matchedCount === 0) {
@@ -344,21 +328,10 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Get Single Studio by ID
+// Get Single Studio by ID (public)
 router.get("/:id", async (req, res) => {
   try {
-    const secret = req.headers["x-internal-api-key"];
     const { id } = req.params;
-
-    if (
-      !process.env.INTERNAL_API_SECRET ||
-      secret !== process.env.INTERNAL_API_SECRET
-    ) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized request",
-      });
-    }
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -399,19 +372,12 @@ router.get("/:id", async (req, res) => {
 router.delete("/:id", verifyAuth, async (req, res) => {
   try {
     const apiKey = req.headers["x-internal-api-key"];
-    const userEmail = req.headers["x-user-email"];
+    const userEmail = req.user.email;
 
     if (apiKey !== process.env.INTERNAL_API_SECRET) {
       return res.status(401).json({
         success: false,
         message: "Unauthorized request",
-      });
-    }
-
-    if (!userEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "User email is required",
       });
     }
 
@@ -425,9 +391,8 @@ router.delete("/:id", verifyAuth, async (req, res) => {
     }
 
     const db = await connectToDatabase();
-    const studios = db.collection("studios");
 
-    const result = await studios.deleteOne({
+    const result = await db.collection("studios").deleteOne({
       _id: new ObjectId(id),
       hostEmail: userEmail,
     });
